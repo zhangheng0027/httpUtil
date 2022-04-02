@@ -184,7 +184,7 @@ public class HttpProxyUtil {
 	/**
 	 * 关闭所有流
 	 */
-	private static void close(Closeable... closeables) {
+	public static void close(Closeable... closeables) {
 		if (closeables != null) {
 			for (int i = 0; i < closeables.length; i++) {
 				if (closeables[i] != null) {
