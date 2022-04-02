@@ -1,6 +1,8 @@
 package com.zh.httpProxy;
 
 
+import util.ThreadUtils;
+
 import java.io.Closeable;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -19,8 +21,7 @@ import java.util.regex.Pattern;
  */
 public class HttpProxyUtil {
 
-	private final static ThreadPoolExecutor pool = new
-			ThreadPoolExecutor(8, 32, 200, TimeUnit.MILLISECONDS, new ArrayBlockingQueue<Runnable>(32));
+
 
 	private final ServerSocket server;
 	private final int port;
@@ -29,7 +30,6 @@ public class HttpProxyUtil {
 		this.port = port;
 		server = new ServerSocket(port);
 		System.out.println("代理端口：" + this.port);
-		run();
 	}
 
 
@@ -39,7 +39,7 @@ public class HttpProxyUtil {
 			try {
 				Socket client = server.accept();
 				//使用线程处理收到的请求
-				pool.execute(() -> new HttpConnectThread(client).run());
+				ThreadUtils.execute(() -> new HttpConnectThread(client).run());
 			} catch (Exception e) {
 				e.printStackTrace();
 			}
@@ -139,10 +139,9 @@ public class HttpProxyUtil {
 			}
 			final CountDownLatch latch = new CountDownLatch(2);
 				// 建立线程 , 用于从内网读数据 , 并返回给外网
-			pool.execute(new HttpChannel(clientInputStream, serverOutputStream, latch));
+			ThreadUtils.execute(new HttpChannel(clientInputStream, serverOutputStream, latch));
 			// 建立线程 , 用于从外网读数据 , 并返回给内网
 			new HttpChannel(serverInputStream, clientOutputStream, latch).run();
-			latch.await(300, TimeUnit.SECONDS);
 			close(serverInputStream, serverOutputStream, server, clientInputStream, clientOutputStream, client);
 			System.out.println("请求地址：" + clientInputString + "，耗时：" + (System.currentTimeMillis() - createTime) + "ms");
 		}

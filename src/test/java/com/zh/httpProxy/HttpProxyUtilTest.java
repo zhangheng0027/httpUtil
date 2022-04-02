@@ -10,6 +10,6 @@ class HttpProxyUtilTest {
 
 	@Test
 	public void aa() throws IOException {
-		HttpProxyUtil util = new HttpProxyUtil(1234);
+		new HttpProxyUtil(1234).run();
 	}
 }
