@@ -1,7 +1,7 @@
 package com.zh.httpProxy;
 
 
-import util.ThreadUtils;
+import com.zh.util.ThreadUtils;
 
 import java.io.Closeable;
 import java.io.DataInputStream;
@@ -9,10 +9,7 @@ import java.io.DataOutputStream;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
