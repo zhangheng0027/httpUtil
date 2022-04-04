@@ -112,9 +112,9 @@ public class HttpTunnelServer {
 				while ((len = in.read(buf, 0, buf.length)) != -1) {
 					Byte[] buff = new Byte[len + 3];
 					System.arraycopy(buf, 0, buff, 3, len);
-					buff[0] = 0;
-					buff[1] = h;
-					buff[2] = l;
+					buff[0] = HttpTunnelConstant.type_0; // 返回信息
+					buff[1] = h; // 高位
+					buff[2] = l; // 地位
 					msgQueue.put(buff);
 				}
 			} catch (IOException | InterruptedException e) {
