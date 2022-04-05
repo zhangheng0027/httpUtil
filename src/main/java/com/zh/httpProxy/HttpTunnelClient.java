@@ -9,15 +9,18 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class HttpTunnelClient {
 
-
     private static int PackageLength = 10240;
+    private static final AtomicInteger globalFlag = new AtomicInteger(1); // 全局flag
     private final Socket serverSocket;
     private final ServerSocket monitorSocket;
-    private final LinkedBlockingQueue<Byte[]> msgQueue = new LinkedBlockingQueue(1024);; // 消息队列
-    private final ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap(64);
+    private static final LinkedBlockingQueue<Byte[]> msgQueue = new LinkedBlockingQueue(1024);; // 消息队列
+    private static final ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap(64);
 
     public HttpTunnelClient(int port, String serverHost, int serverPort) throws IOException {
         serverSocket = new Socket(serverHost, serverPort);
@@ -38,7 +41,7 @@ public class HttpTunnelClient {
             }
         });
 
-        ThreadUtils.execute(() -> {
+        ThreadUtils.execute(() -> { // 将服务器请求进行分发
             try (InputStream inputStream = serverSocket.getInputStream()) {
                 int len;
                 byte[] buf = new byte[PackageLength];
@@ -47,7 +50,13 @@ public class HttpTunnelClient {
                         continue;
                     byte flag = buf[0];
                     int i = (((int)buf[1]) << 8) | buf[2];
-                    
+                    if (HttpTunnelConstant.type_0 == flag) {
+                        if (!map.contains(i))
+                            continue;
+                        OutputStream o = map.get(i);
+                        o.write(buf, 3, len - 3);
+                        o.flush();
+                    }
                 }
             } catch (IOException  e) {
                 e.printStackTrace();
@@ -59,7 +68,7 @@ public class HttpTunnelClient {
             ThreadUtils.execute(() -> {
                 try {
                     new A(socket). handle();
-                } catch (IOException e) {
+                } catch (IOException | InterruptedException e) {
                     e.printStackTrace();
                 }
             });
@@ -68,15 +77,82 @@ public class HttpTunnelClient {
     static class A {
         final private InputStream inputStream;
         final private OutputStream outputStream;
-
+        final private Socket socket;
+        final int flag;
+        final byte h;
+        final byte l;
         A(Socket s) throws IOException {
+            flag = globalFlag.incrementAndGet();
+            socket = s;
             inputStream = s.getInputStream();
             outputStream = s.getOutputStream();
+            map.put(flag, outputStream);
+            h = (byte) (flag >> 8);
+            l = (byte) (flag & 0xff);
+
         }
 
-        public void handle() {
+        public void handle() throws IOException, InterruptedException {
+            Byte[] buf = new Byte[PackageLength];
+            buf[0] = HttpTunnelConstant.type_2;
+            buf[1] = h;
+            buf[2] = l;
 
+            byte[] buff = new byte[PackageLength - 3];
+            int len = inputStream.read(buff);
+            if (len <= 0) {
+                return;
+            }
+            String context =  new String(buff, 0, len);
+            String[] cs = context.split("\n");
+            // 从所读数据中取域名和端口号
+            String host = parseServerHost(cs[0]);
+            System.arraycopy(buf, 3, host.getBytes(), 0, host.length());
+            msgQueue.put(buf);
+            if (cs[0].startsWith("CONNECT")) {
+                String ack = "HTTP/1.0 200 Connection established\r\n";
+                ack = ack + "Proxy-agent: proxy\r\n\r\n";
+                outputStream.write(ack.getBytes());
+                outputStream.flush();
+            } else {
+                Byte[] bytes = new Byte[len + 3];
+                bytes[0] = HttpTunnelConstant.type_1;
+                bytes[1] = h;
+                bytes[2] = l;
+                System.arraycopy(bytes, 3, buff, 0, len);
+                msgQueue.put(bytes);
+            }
+            while ((len = inputStream.read(buff, 0, buf.length)) != -1) {
+                Byte[] b = new Byte[len + 3];
+                b[0] = HttpTunnelConstant.type_1;
+                b[1] = h;
+                b[2] = l;
+                System.arraycopy(b, 3, buff, 0, len);
+                msgQueue.put(b);
+            }
         }
+
+        public void finalize() {
+            map.remove(flag);
+            HttpProxyUtil.close(inputStream, outputStream, socket);
+        }
+    }
+
+    private static String parseServerHost(String con) {
+        String regExp = "http://([^/]+)/";
+        if (con.startsWith("CONNECT"))
+            regExp = "CONNECT ([^ ]+) HTTP/";
+        Pattern pattern = Pattern.compile(regExp);
+        Matcher matcher = pattern.matcher(con + "/");
+        StringBuffer sb = new StringBuffer(255);
+        if (matcher.find()) {
+            String host = matcher.group(1);
+            if (host.contains(":")) {
+               sb.append(host.substring(0, host.indexOf(":"))).append(" ");
+               sb.append(host.substring(host.indexOf(":") + 1));
+            }
+        }
+        return sb.toString();
     }
 
     public void finalize() {

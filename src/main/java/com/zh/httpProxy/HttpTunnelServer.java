@@ -76,11 +76,11 @@ public class HttpTunnelServer {
 						continue;
 					int i = (((int)buf[1]) << 8) | buf[2];
 					byte flag = buf[0];
-					if (1 == flag) { // 发送数据
+					if (HttpTunnelConstant.type_1 == flag) { // 发送数据
 						OutputStream o =  map.get(i);
 						o.write(buf,3, len - 3);
 						o.flush();
-					} else if (2 == flag) { // 新建连接
+					} else if (HttpTunnelConstant.type_2 == flag) { // 新建连接
 						String[] context = new String(buf, 3, len - 3).split(" ");
 						Socket s = new Socket(context[0], Integer.valueOf(context[1]));
 						map.put(i, s.getOutputStream());
@@ -104,7 +104,6 @@ public class HttpTunnelServer {
 		public void handleReceive(int i, Socket socket){
 			byte h = (byte) (i >> 8);
 			byte l = (byte) (i & 0xff);
-			int ai = 0xf;
 			try(InputStream in = socket.getInputStream()) {
 				int len;
 				byte buf[] = new byte[packageLength - 3];

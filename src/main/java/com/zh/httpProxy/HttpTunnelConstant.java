@@ -8,4 +8,9 @@ public class HttpTunnelConstant {
 
     /** client 端发送给 server 端 **/
     public static final byte type_1 = 1;
+
+    /** client 收到新建连接请求，通知 server 新建连接 **/
+    public static final byte type_2 = 2;
+
+
 }
