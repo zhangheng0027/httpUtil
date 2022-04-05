@@ -1,5 +1,6 @@
 package com.zh.httpProxy;
 
+import com.zh.util.ArrayUtils;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -12,7 +13,10 @@ class TestTest {
 
 	@Test
 	public void test() throws IOException {
-		TestA ta = new TestA(1234);
+		byte[] b = {1,2,3,4,5,5};
+		Byte[] bs = new Byte[b.length];
+		ArrayUtils.byte2Byte(b, 0, bs, 1, b.length -1);
+		System.out.println(bs[1]);
 	}
 
 	@Test

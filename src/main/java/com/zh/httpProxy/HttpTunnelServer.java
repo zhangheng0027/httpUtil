@@ -1,6 +1,9 @@
 package com.zh.httpProxy;
 
+import com.zh.util.ArrayUtils;
 import com.zh.util.ThreadUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -9,15 +12,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 
 public class HttpTunnelServer {
+	private static final Logger log = LogManager.getLogger(HttpTunnelServer.class);
 	private final ServerSocket server;
+	private final int port;
 	public HttpTunnelServer(int port) throws IOException {
+		this.port = port;
 		server = new ServerSocket(port);
 	}
 
 	public void run() throws IOException {
+		log.info("服务启动，开始监听 {} 端口", port);
 		while (true) {
 			Socket socket = server.accept();
 			ThreadUtils.execute(() -> {
@@ -52,14 +60,14 @@ public class HttpTunnelServer {
 		}
 
 		public void handle() {
-
+			log.info("一台客户端进行了连接");
 			// 将消息返回给客户端
 			ThreadUtils.execute(() -> {
 				while (true) {
 					try {
 						Byte[] buf = msgQueue.take();
 						byte[] buff = new byte[buf.length];
-						System.arraycopy(buf, 0, buff, 0, buf.length);
+						ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
 						clientOutputStream.write(buff);
 					} catch (InterruptedException | IOException e) {
 						e.printStackTrace();
@@ -70,7 +78,7 @@ public class HttpTunnelServer {
 			try { // 处理来自客户端的请求
 				int len;
 				byte buf[] = new byte[packageLength];
-				Map<Integer, OutputStream> map = new HashMap<>(32);
+				ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap<>(32);
 				while ((len = clientInputStream.read(buf, 0, buf.length)) != -1) {
 					if (len < 3)
 						continue;
@@ -82,6 +90,7 @@ public class HttpTunnelServer {
 						o.flush();
 					} else if (HttpTunnelConstant.type_2 == flag) { // 新建连接
 						String[] context = new String(buf, 3, len - 3).split(" ");
+						log.info("新建连接，客户端地址 {}, 端口 {}", context);
 						Socket s = new Socket(context[0], Integer.valueOf(context[1]));
 						map.put(i, s.getOutputStream());
 						ThreadUtils.execute(() -> {
@@ -110,7 +119,7 @@ public class HttpTunnelServer {
 				Map<Integer, OutputStream> map = new HashMap<>(32);
 				while ((len = in.read(buf, 0, buf.length)) != -1) {
 					Byte[] buff = new Byte[len + 3];
-					System.arraycopy(buf, 0, buff, 3, len);
+					ArrayUtils.byte2Byte(buf, 0, buff, 3, len);
 					buff[0] = HttpTunnelConstant.type_0; // 返回信息
 					buff[1] = h; // 高位
 					buff[2] = l; // 地位

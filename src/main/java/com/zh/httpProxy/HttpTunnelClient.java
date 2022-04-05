@@ -1,6 +1,9 @@
 package com.zh.httpProxy;
 
+import com.zh.util.ArrayUtils;
 import com.zh.util.ThreadUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -15,6 +18,7 @@ import java.util.regex.Pattern;
 
 public class HttpTunnelClient {
 
+    private static final Logger log = LogManager.getLogger(HttpTunnelClient.class);
     private static int PackageLength = 10240;
     private static final AtomicInteger globalFlag = new AtomicInteger(1); // 全局flag
     private final Socket serverSocket;
@@ -22,19 +26,28 @@ public class HttpTunnelClient {
     private static final LinkedBlockingQueue<Byte[]> msgQueue = new LinkedBlockingQueue(1024);; // 消息队列
     private static final ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap(64);
 
+    /**
+     *
+     * @param port 监听当前主机的端口
+     * @param serverHost 服务端地址
+     * @param serverPort 服务端端口
+     * @throws IOException
+     */
     public HttpTunnelClient(int port, String serverHost, int serverPort) throws IOException {
         serverSocket = new Socket(serverHost, serverPort);
         monitorSocket = new ServerSocket(port);
     }
 
     public void run() throws IOException {
-
         ThreadUtils.execute(() -> { // 将请求发给服务端
             try(OutputStream outputStream = serverSocket.getOutputStream()) {
                 while (true) {
                     Byte[] buf = msgQueue.take();
                     byte[] buff = new byte[buf.length];
-                    System.arraycopy(buf, 0, buff, 0, buf.length);
+
+                    ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
+                    outputStream.write(buff);
+                    outputStream.flush();
                 }
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
@@ -89,15 +102,9 @@ public class HttpTunnelClient {
             map.put(flag, outputStream);
             h = (byte) (flag >> 8);
             l = (byte) (flag & 0xff);
-
         }
 
         public void handle() throws IOException, InterruptedException {
-            Byte[] buf = new Byte[PackageLength];
-            buf[0] = HttpTunnelConstant.type_2;
-            buf[1] = h;
-            buf[2] = l;
-
             byte[] buff = new byte[PackageLength - 3];
             int len = inputStream.read(buff);
             if (len <= 0) {
@@ -107,8 +114,13 @@ public class HttpTunnelClient {
             String[] cs = context.split("\n");
             // 从所读数据中取域名和端口号
             String host = parseServerHost(cs[0]);
-            System.arraycopy(buf, 3, host.getBytes(), 0, host.length());
+            Byte[] buf = new Byte[host.length() + 3];
+            buf[0] = HttpTunnelConstant.type_2; // 新建连接
+            buf[1] = h;
+            buf[2] = l;
+            ArrayUtils.byte2Byte(host.getBytes(), 0, buf, 3, host.length());
             msgQueue.put(buf);
+
             if (cs[0].startsWith("CONNECT")) {
                 String ack = "HTTP/1.0 200 Connection established\r\n";
                 ack = ack + "Proxy-agent: proxy\r\n\r\n";
@@ -119,15 +131,15 @@ public class HttpTunnelClient {
                 bytes[0] = HttpTunnelConstant.type_1;
                 bytes[1] = h;
                 bytes[2] = l;
-                System.arraycopy(bytes, 3, buff, 0, len);
+                ArrayUtils.byte2Byte(buff, 0, bytes, 3, len);
                 msgQueue.put(bytes);
             }
-            while ((len = inputStream.read(buff, 0, buf.length)) != -1) {
+            while ((len = inputStream.read(buff, 0, buff.length)) != -1) {
                 Byte[] b = new Byte[len + 3];
                 b[0] = HttpTunnelConstant.type_1;
                 b[1] = h;
                 b[2] = l;
-                System.arraycopy(b, 3, buff, 0, len);
+                ArrayUtils.byte2Byte(buff, 0, b, 3, len);
                 msgQueue.put(b);
             }
         }
@@ -138,7 +150,12 @@ public class HttpTunnelClient {
         }
     }
 
-    private static String parseServerHost(String con) {
+    /**
+     * 解析请求地址与端口，以空格分隔
+     * @param con
+     * @return
+     */
+    public static String parseServerHost(String con) {
         String regExp = "http://([^/]+)/";
         if (con.startsWith("CONNECT"))
             regExp = "CONNECT ([^ ]+) HTTP/";
@@ -150,6 +167,8 @@ public class HttpTunnelClient {
             if (host.contains(":")) {
                sb.append(host.substring(0, host.indexOf(":"))).append(" ");
                sb.append(host.substring(host.indexOf(":") + 1));
+            } else  {
+                sb.append(host).append(" 80");
             }
         }
         return sb.toString();
