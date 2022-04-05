@@ -18,6 +18,8 @@ import java.util.regex.Pattern;
 
 public class HttpTunnelClient {
 
+    private static final String version = "v1.0";
+
     private static final Logger log = LogManager.getLogger(HttpTunnelClient.class);
     private static int PackageLength = 10240;
     private static final AtomicInteger globalFlag = new AtomicInteger(1); // 全局flag
@@ -38,7 +40,14 @@ public class HttpTunnelClient {
         monitorSocket = new ServerSocket(port);
     }
 
-    public void run() throws IOException {
+    public void run() throws IOException, InterruptedException {
+
+        StringBuffer sb = new StringBuffer(64);
+        sb.append(version).append(" ").append(PackageLength);
+        Byte[] bytes = new Byte[sb.length()];
+        ArrayUtils.byte2Byte(sb.toString().getBytes(), 0, bytes, 0, sb.length());
+        msgQueue.put(bytes);
+
         ThreadUtils.execute(() -> { // 将请求发给服务端
             try(OutputStream outputStream = serverSocket.getOutputStream()) {
                 while (true) {
@@ -64,7 +73,7 @@ public class HttpTunnelClient {
                     byte flag = buf[0];
                     int i = (((int)buf[1]) << 8) | buf[2];
                     if (HttpTunnelConstant.type_0 == flag) {
-                        if (!map.contains(i))
+                        if (!map.containsKey(i))
                             continue;
                         OutputStream o = map.get(i);
                         o.write(buf, 3, len - 3);

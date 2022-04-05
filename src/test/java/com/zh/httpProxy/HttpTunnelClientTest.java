@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class HttpTunnelClientTest {
 
     @Test
-    public void runC() throws IOException {
+    public void runC() throws IOException, InterruptedException {
         HttpTunnelClient htc = new HttpTunnelClient(1234, "127.0.0.1", 12345);
         htc.run();
     }

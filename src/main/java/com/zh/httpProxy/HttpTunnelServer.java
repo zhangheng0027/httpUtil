@@ -94,7 +94,7 @@ public class HttpTunnelServer {
 						Socket s = new Socket(context[0], Integer.valueOf(context[1]));
 						map.put(i, s.getOutputStream());
 						ThreadUtils.execute(() -> {
-							handleReceive(i, socket);
+							handleReceive(i, s);
 						});
 					}
 
