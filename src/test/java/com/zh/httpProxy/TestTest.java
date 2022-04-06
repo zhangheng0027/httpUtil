@@ -4,6 +4,8 @@ import com.zh.util.ArrayUtils;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.*;
 import java.util.Scanner;
 
@@ -40,7 +42,10 @@ class TestTest {
 
 
 	@Test
-	public void a() {
-		System.out.println("abcde".substring(3));
+	public void a() throws IOException {
+		Socket s = new Socket("www.baidu.com", 80);
+		OutputStream o = s.getOutputStream();
+		InputStream i = s.getInputStream();
+
 	}
 }

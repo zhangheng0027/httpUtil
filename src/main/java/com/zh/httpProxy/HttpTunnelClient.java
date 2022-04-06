@@ -4,6 +4,8 @@ import com.zh.util.ArrayUtils;
 import com.zh.util.ThreadUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.quartz.*;
+import org.quartz.impl.StdSchedulerFactory;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -40,21 +42,35 @@ public class HttpTunnelClient {
         monitorSocket = new ServerSocket(port);
     }
 
-    public void run() throws IOException, InterruptedException {
+    public void run() throws IOException, InterruptedException, SchedulerException {
 
         StringBuffer sb = new StringBuffer(64);
         sb.append(version).append(" ").append(PackageLength);
         Byte[] bytes = new Byte[sb.length()];
         ArrayUtils.byte2Byte(sb.toString().getBytes(), 0, bytes, 0, sb.length());
         msgQueue.put(bytes);
+        SimpleTrigger trigger = TriggerBuilder.newTrigger().
+                withIdentity("myTrigger").
+                startNow().
+                withSchedule(SimpleScheduleBuilder.simpleSchedule().
+                        withIntervalInSeconds(10).
+                        repeatForever()).
+                build();
+        //创建schedule实例
+        StdSchedulerFactory factory = new StdSchedulerFactory();
+        Scheduler scheduler = factory.getScheduler();
+        scheduler.start();
+        JobDetail jobDetail = JobBuilder.newJob(job.class).withIdentity("xintiao").build();
+        //执行job
+        scheduler.scheduleJob(jobDetail,trigger);
 
         ThreadUtils.execute(() -> { // 将请求发给服务端
             try(OutputStream outputStream = serverSocket.getOutputStream()) {
                 while (true) {
                     Byte[] buf = msgQueue.take();
                     byte[] buff = new byte[buf.length];
-
                     ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
+                    log.info("发送数据 flag {} 长度 {}", buff[0], buf.length);
                     outputStream.write(buff);
                     outputStream.flush();
                 }
@@ -71,6 +87,7 @@ public class HttpTunnelClient {
                     if (len < 3)
                         continue;
                     byte flag = buf[0];
+                    log.info("收到数据 flag {} 长度 {}", buf[0], len);
                     int i = (((int)buf[1]) << 8) | buf[2];
                     if (HttpTunnelConstant.type_0 == flag) {
                         if (!map.containsKey(i))
@@ -156,6 +173,24 @@ public class HttpTunnelClient {
         public void finalize() {
             map.remove(flag);
             HttpProxyUtil.close(inputStream, outputStream, socket);
+        }
+    }
+
+    public static class job implements Job {
+
+        @Override
+        public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
+            if (msgQueue.size() > 0)
+                return;
+
+            Byte[] bytes = new Byte[3];
+            bytes[0] = HttpTunnelConstant.byte_127;
+            bytes[1] = 0;
+            bytes[2] = 0;
+            try {
+                msgQueue.put(bytes);
+            } catch (InterruptedException e) {
+            }
         }
     }
 

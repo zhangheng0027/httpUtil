@@ -84,6 +84,7 @@ public class HttpTunnelServer {
 						continue;
 					int i = (((int)buf[1]) << 8) | buf[2];
 					byte flag = buf[0];
+					log.info("接受 {} 数据 flag {} 长度 {}", i, buf[0], len);
 					if (HttpTunnelConstant.type_1 == flag) { // 发送数据
 						OutputStream o =  map.get(i);
 						o.write(buf,3, len - 3);
@@ -96,6 +97,13 @@ public class HttpTunnelServer {
 						ThreadUtils.execute(() -> {
 							handleReceive(i, s);
 						});
+					} else if (HttpTunnelConstant.byte_127 == flag) {
+						// 收到心跳包, 进行返回
+						Byte[] bytes = new Byte[3];
+						bytes[0] = HttpTunnelConstant.byte_127;
+						bytes[1] = 0;
+						bytes[2] = 0;
+						msgQueue.put(bytes);
 					}
 
 				}
