@@ -15,4 +15,9 @@ class HttpTunnelClientTest {
         htc.run();
     }
 
+    @Test
+    public void parseServerHostTest() {
+        System.out.println(HttpTunnelClient.parseServerHost("abc https://www.baidu.com/ dc"));
+    }
+
 }

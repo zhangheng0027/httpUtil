@@ -43,7 +43,6 @@ public class HttpTunnelClient {
     }
 
     public void run() throws IOException, InterruptedException, SchedulerException {
-
         StringBuffer sb = new StringBuffer(64);
         sb.append(version).append(" ").append(PackageLength);
         Byte[] bytes = new Byte[sb.length()];
@@ -70,7 +69,8 @@ public class HttpTunnelClient {
                     Byte[] buf = msgQueue.take();
                     byte[] buff = new byte[buf.length];
                     ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
-                    log.info("发送数据 flag {} 长度 {}", buff[0], buf.length);
+                    if (buff[buff.length - 1] < 33 && buff[buff.length - 1] != 0)
+                        log.info("发送数据 flag {} 长度 {} 最后一位字符 {}", buff[0], buff.length, buff[buff.length - 1]);
                     outputStream.write(buff);
                     outputStream.flush();
                 }
@@ -87,7 +87,7 @@ public class HttpTunnelClient {
                     if (len < 3)
                         continue;
                     byte flag = buf[0];
-                    log.info("收到数据 flag {} 长度 {}", buf[0], len);
+//                    log.info("收到数据 flag {} 长度 {}", buf[0], len);
                     int i = (((int)buf[1]) << 8) | buf[2];
                     if (HttpTunnelConstant.type_0 == flag) {
                         if (!map.containsKey(i))
@@ -177,7 +177,7 @@ public class HttpTunnelClient {
     }
 
     public static class job implements Job {
-
+        static AtomicInteger ai = new AtomicInteger(0);
         @Override
         public void execute(JobExecutionContext jobExecutionContext) throws JobExecutionException {
             if (msgQueue.size() > 0)
@@ -211,8 +211,16 @@ public class HttpTunnelClient {
             if (host.contains(":")) {
                sb.append(host.substring(0, host.indexOf(":"))).append(" ");
                sb.append(host.substring(host.indexOf(":") + 1));
-            } else  {
+            } else {
                 sb.append(host).append(" 80");
+            }
+        } else {
+            regExp = "https://([^/]+)/";
+            pattern = Pattern.compile(regExp);
+            matcher = pattern.matcher(con + "/");
+            if (matcher.find()) {
+                String host = matcher.group(1);
+                sb.append(host).append(" 443");
             }
         }
         return sb.toString();

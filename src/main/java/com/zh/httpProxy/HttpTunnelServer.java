@@ -33,6 +33,8 @@ public class HttpTunnelServer {
 					new A(socket).handle();
 				} catch (IOException e) {
 					e.printStackTrace();
+				} finally {
+					log.info("客户端退出链接");
 				}
 			});
 		}
@@ -56,21 +58,25 @@ public class HttpTunnelServer {
 			int len = clientInputStream.read(bytes, 0, bytes.length);
 			String[] contexts = new String(bytes, 0, len).split(" ");
 			clientVersion = contexts[0];
-			packageLength = Integer.valueOf(contexts[1]);
+//			packageLength = Integer.valueOf(contexts[1]);
+			packageLength = 10000;
 		}
+
 
 		public void handle() {
 			log.info("一台客户端进行了连接");
 			// 将消息返回给客户端
 			ThreadUtils.execute(() -> {
+				byte[] t = {'a'};
 				while (true) {
 					try {
 						Byte[] buf = msgQueue.take();
 						byte[] buff = new byte[buf.length];
 						ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
 						clientOutputStream.write(buff);
+						t = buff;
 					} catch (InterruptedException | IOException e) {
-						e.printStackTrace();
+						log.error(e.getMessage(), e);
 					}
 				}
 			});
@@ -91,13 +97,13 @@ public class HttpTunnelServer {
 						o.flush();
 					} else if (HttpTunnelConstant.type_2 == flag) { // 新建连接
 						String[] context = new String(buf, 3, len - 3).split(" ");
-						log.info("新建连接，客户端地址 {}, 端口 {}", context);
+						log.info("新建连接 {}，客户端地址 {}, 端口 {}", i, context);
 						Socket s = new Socket(context[0], Integer.valueOf(context[1]));
 						map.put(i, s.getOutputStream());
 						ThreadUtils.execute(() -> {
 							handleReceive(i, s);
-						});
-					} else if (HttpTunnelConstant.byte_127 == flag) {
+					});
+				} else if (HttpTunnelConstant.byte_127 == flag) {
 						// 收到心跳包, 进行返回
 						Byte[] bytes = new Byte[3];
 						bytes[0] = HttpTunnelConstant.byte_127;

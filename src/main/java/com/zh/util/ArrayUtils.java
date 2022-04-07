@@ -21,4 +21,8 @@ public class ArrayUtils {
         return new String(b);
     }
 
+    public static String array2String(byte[] bs) {
+        return new String(bs);
+    }
+
 }
