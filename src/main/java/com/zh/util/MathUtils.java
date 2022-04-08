@@ -27,7 +27,7 @@ public class MathUtils {
 	public static int bytes2int(byte[] bs, int offset, int len) {
 		int result = 0;
 		for (int i = offset; i < offset + len; i++) {
-			result = (result << 8) | bs[i];
+			result = (result << 8) | ((int)bs[i] & 0xFF);
 		}
 		return result;
 	}

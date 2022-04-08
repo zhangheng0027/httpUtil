@@ -15,18 +15,19 @@ class MathUtilsTest {
 
 	@Test
 	public void b() {
-		byte[] bs = MathUtils.int2bytes(258);
+		byte[] bs = MathUtils.int2bytes(129);
 		log.info("{}, {}", bs);
 	}
 
 	@Test
 	public void c() {
-		int i = 127;
-//		for (int i = 1; i < 10240; i++) {
+		for (int i = 1; i < 10240; i++) {
 			byte[] bs = MathUtils.int2bytes(i);
-			if (MathUtils.bytes2int(bs, 0, bs.length) != i)
-				log.info(i);
-//		}
+			if (MathUtils.bytes2int(bs, 0, bs.length) != i) {
+				log.info("{} {}",i, bs);
+				return;
+			}
+		}
 	}
 
 }
