@@ -1,6 +1,7 @@
 package com.zh.httpProxy;
 
 import com.zh.util.ArrayUtils;
+import com.zh.util.MathUtils;
 import com.zh.util.ThreadUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -23,12 +24,17 @@ public class HttpTunnelClient {
     private static final String version = "v1.0";
 
     private static final Logger log = LogManager.getLogger(HttpTunnelClient.class);
-    private static int PackageLength = 10240;
+    private static final int PackageLength = 10240;  // 一次报文最长长度
+    private static final int lengthByte;  // 报文的长度所需的占的位数
     private static final AtomicInteger globalFlag = new AtomicInteger(1); // 全局flag
     private final Socket serverSocket;
     private final ServerSocket monitorSocket;
     private static final LinkedBlockingQueue<Byte[]> msgQueue = new LinkedBlockingQueue(1024);; // 消息队列
     private static final ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap(64);
+
+    static {
+        lengthByte = MathUtils.getLengthByte(PackageLength);
+    }
 
     /**
      *
@@ -67,9 +73,17 @@ public class HttpTunnelClient {
             try(OutputStream outputStream = serverSocket.getOutputStream()) {
                 while (true) {
                     Byte[] buf = msgQueue.take();
-                    byte[] buff = new byte[buf.length];
-                    ArrayUtils.Byte2byte(buf, 0, buff, 0, buf.length);
-                    if (buff[buff.length - 1] < 33 && buff[buff.length - 1] != 0)
+                    byte[] buff = new byte[buf.length + lengthByte];
+                    ArrayUtils.Byte2byte(buf, 0, buff, lengthByte, buf.length);
+
+                    // 将一个包的长度拼接在报文开头
+                    byte[] ls = MathUtils.int2bytes(buf.length);
+                    System.arraycopy(ls, 0, buff, lengthByte - ls.length, ls.length);
+
+                    byte flag = buff[lengthByte];
+                    if (HttpTunnelConstant.type_2 == flag)
+                        log.info("长度 {} 新建链接 地址 {}", buff.length, new String(buff, 3, buff.length - 3));
+                    else if (HttpTunnelConstant.byte_127 != flag)
                         log.info("发送数据 flag {} 长度 {} 最后一位字符 {}", buff[0], buff.length, buff[buff.length - 1]);
                     outputStream.write(buff);
                     outputStream.flush();
@@ -87,7 +101,6 @@ public class HttpTunnelClient {
                     if (len < 3)
                         continue;
                     byte flag = buf[0];
-//                    log.info("收到数据 flag {} 长度 {}", buf[0], len);
                     int i = (((int)buf[1]) << 8) | buf[2];
                     if (HttpTunnelConstant.type_0 == flag) {
                         if (!map.containsKey(i))
@@ -131,7 +144,7 @@ public class HttpTunnelClient {
         }
 
         public void handle() throws IOException, InterruptedException {
-            byte[] buff = new byte[PackageLength - 3];
+            byte[] buff = new byte[PackageLength - 3 - lengthByte];
             int len = inputStream.read(buff);
             if (len <= 0) {
                 return;

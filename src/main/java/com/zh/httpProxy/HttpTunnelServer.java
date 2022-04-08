@@ -1,6 +1,7 @@
 package com.zh.httpProxy;
 
 import com.zh.util.ArrayUtils;
+import com.zh.util.MathUtils;
 import com.zh.util.ThreadUtils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -30,7 +31,7 @@ public class HttpTunnelServer {
 			Socket socket = server.accept();
 			ThreadUtils.execute(() -> {
 				try {
-					new A(socket).handle();
+					new Client(socket).handle();
 				} catch (IOException e) {
 					e.printStackTrace();
 				} finally {
@@ -41,15 +42,16 @@ public class HttpTunnelServer {
 	}
 
 
-	private static class A {
+	private static class Client {
 
 		final Socket socket;
 		final InputStream clientInputStream;
 		final OutputStream clientOutputStream;
 		final String clientVersion; // 客户端版本， 预留字段
 		final int packageLength; // 约定每个包最长长度
+		final int lengthByte;
 		final LinkedBlockingQueue<Byte[]> msgQueue; // 消息队列
-		A(Socket socket) throws IOException {
+		Client(Socket socket) throws IOException {
 			msgQueue = new LinkedBlockingQueue(1024);
 			this.socket = socket;
 			clientInputStream = socket.getInputStream();;
@@ -58,8 +60,8 @@ public class HttpTunnelServer {
 			int len = clientInputStream.read(bytes, 0, bytes.length);
 			String[] contexts = new String(bytes, 0, len).split(" ");
 			clientVersion = contexts[0];
-//			packageLength = Integer.valueOf(contexts[1]);
-			packageLength = 10000;
+			packageLength = Integer.valueOf(contexts[1]);
+			lengthByte = MathUtils.getLengthByte(packageLength);
 		}
 
 
@@ -90,14 +92,15 @@ public class HttpTunnelServer {
 						continue;
 					int i = (((int)buf[1]) << 8) | buf[2];
 					byte flag = buf[0];
-					log.info("接受 {} 数据 flag {} 长度 {}", i, buf[0], len);
+					if (HttpTunnelConstant.byte_127 != flag)
+						log.info("接受 {} 数据 flag {} 长度 {}", i, buf[0], len);
 					if (HttpTunnelConstant.type_1 == flag) { // 发送数据
 						OutputStream o =  map.get(i);
 						o.write(buf,3, len - 3);
 						o.flush();
 					} else if (HttpTunnelConstant.type_2 == flag) { // 新建连接
 						String[] context = new String(buf, 3, len - 3).split(" ");
-						log.info("新建连接 {}，客户端地址 {}, 端口 {}", i, context);
+						log.info("长度{} 新建连接 {}，客户端地址 {}, 端口 {}", len, i, context[0], context[1]);
 						Socket s = new Socket(context[0], Integer.valueOf(context[1]));
 						map.put(i, s.getOutputStream());
 						ThreadUtils.execute(() -> {
@@ -129,7 +132,7 @@ public class HttpTunnelServer {
 			byte l = (byte) (i & 0xff);
 			try(InputStream in = socket.getInputStream()) {
 				int len;
-				byte buf[] = new byte[packageLength - 3];
+				byte buf[] = new byte[packageLength - 3 - lengthByte];
 				Map<Integer, OutputStream> map = new HashMap<>(32);
 				while ((len = in.read(buf, 0, buf.length)) != -1) {
 					Byte[] buff = new Byte[len + 3];
