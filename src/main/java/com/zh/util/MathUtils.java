@@ -24,4 +24,12 @@ public class MathUtils {
 		return bs;
 	}
 
+	public static int bytes2int(byte[] bs, int offset, int len) {
+		int result = 0;
+		for (int i = offset; i < offset + len; i++) {
+			result = (result << 8) | bs[i];
+		}
+		return result;
+	}
+
 }

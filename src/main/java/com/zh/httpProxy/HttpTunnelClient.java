@@ -96,10 +96,13 @@ public class HttpTunnelClient {
         ThreadUtils.execute(() -> { // 将服务器请求进行分发
             try (InputStream inputStream = serverSocket.getInputStream()) {
                 int len;
-                byte[] buf = new byte[PackageLength];
+                byte[] buf = new byte[PackageLength]; // 读到的报文
+                byte[] buff = new byte[PackageLength]; // 真实报文
+                int lenf = 0;
                 while ((len = inputStream.read(buf, 0, buf.length)) != -1) {
-                    if (len < 3)
-                        continue;
+
+
+
                     byte flag = buf[0];
                     int i = (((int)buf[1]) << 8) | buf[2];
                     if (HttpTunnelConstant.type_0 == flag) {
