@@ -30,4 +30,17 @@ class MathUtilsTest {
 		}
 	}
 
+	@Test
+	public void d() {
+		int[] a = {1,2,3,4,5,6,7,8,9,0};
+		System.arraycopy(a, 3, a, 0, 7);
+		log.info("{}", a);
+	}
+
+	@Test
+	public void e() {
+		int i = 129;
+		System.out.println(0xFF & ((byte)i));
+	}
+
 }

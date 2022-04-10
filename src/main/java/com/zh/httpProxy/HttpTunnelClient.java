@@ -49,9 +49,14 @@ public class HttpTunnelClient {
     }
 
     public void run() throws IOException, InterruptedException, SchedulerException {
+
         StringBuffer sb = new StringBuffer(64);
         sb.append(version).append(" ").append(PackageLength);
-        Byte[] bytes = new Byte[sb.length()];
+        Byte[] bytes = new Byte[256 - lengthByte]; // 在发送时会在报文前拼上 lengthByte 位
+        for (int i = 0; i < bytes.length; i++)
+            bytes[i] = 0;
+        bytes[bytes.length - 1] = (byte)lengthByte;
+        bytes[bytes.length - 2] = (byte)sb.length();
         ArrayUtils.byte2Byte(sb.toString().getBytes(), 0, bytes, 0, sb.length());
         msgQueue.put(bytes);
         SimpleTrigger trigger = TriggerBuilder.newTrigger().
@@ -97,20 +102,50 @@ public class HttpTunnelClient {
             try (InputStream inputStream = serverSocket.getInputStream()) {
                 int len;
                 byte[] buf = new byte[PackageLength]; // 读到的报文
-                byte[] buff = new byte[PackageLength]; // 真实报文
-                int lenf = 0;
+
                 while ((len = inputStream.read(buf, 0, buf.length)) != -1) {
-
-
-
-                    byte flag = buf[0];
-                    int i = (((int)buf[1]) << 8) | buf[2];
-                    if (HttpTunnelConstant.type_0 == flag) {
-                        if (!map.containsKey(i))
-                            continue;
-                        OutputStream o = map.get(i);
-                        o.write(buf, 3, len - 3);
-                        o.flush();
+                    int offset = 0; // 偏移量
+                    boolean isBreak = false;
+                    while (offset < len) {
+                        int l = -1;
+                        if (offset + lengthByte > len) {
+                            isBreak = true;
+                            byte[] bs = new byte[lengthByte];
+                            System.arraycopy(buf, offset, bs, 0, len - offset);
+                            inputStream.read(buf, 0, offset + lengthByte - len);
+                            System.arraycopy(buf, 0, bs, len - offset, offset + lengthByte - len);
+                            l = MathUtils.bytes2int(bs, 0, bs.length);
+                            len = inputStream.read(buf, 0, l);
+                            offset = 0;
+                        } else if (offset + lengthByte == len) {
+                            isBreak = true;
+                            l = MathUtils.bytes2int(buf, offset, lengthByte);
+                            len = inputStream.read(buf, 0, l);
+                            offset = 0;
+                        } else {
+                            l = MathUtils.bytes2int(buf, offset, lengthByte);
+                            if (offset + lengthByte + l > len) {
+                                isBreak = true;
+                                System.arraycopy(buf, offset + lengthByte, buf, 0, len - offset - lengthByte);
+                                inputStream.read(buf, len - offset - lengthByte, offset + lengthByte + l - len);
+                                len = l;
+                                offset = 0;
+                            } else {
+                                offset += lengthByte;
+                            }
+                        }
+                        byte flag = buf[0 + offset];
+                        int i = (((int)buf[1 + offset]) << 8) | buf[2 + offset];
+                        if (HttpTunnelConstant.type_0 == flag) {
+                            if (!map.containsKey(i))
+                                continue;
+                            OutputStream o = map.get(i);
+                            o.write(buf, 3 + offset, l - 3);
+                            o.flush();
+                        }
+                        if (isBreak)
+                            break;
+                        offset += l;
                     }
                 }
             } catch (IOException  e) {
