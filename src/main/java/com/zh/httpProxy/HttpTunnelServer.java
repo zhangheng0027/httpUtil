@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.net.UnknownHostException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -96,7 +97,7 @@ public class HttpTunnelServer {
 			try { // 处理来自客户端的请求
 				int len;
 				byte buf[] = new byte[packageLength];
-				ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap<>(32);
+				ConcurrentHashMap<Integer, HttpStreamModel> map = new ConcurrentHashMap<>(32);
 				while ((len = clientInputStream.read(buf, 0, buf.length)) != -1) {
 					int offset = 0; // 偏移量
 					boolean isBreak = false;
@@ -135,17 +136,32 @@ public class HttpTunnelServer {
 						if (HttpTunnelConstant.byte_127 != flag)
 							log.info("接受 {} 数据 flag {} 长度 {}", i, flag, l);
 						if (HttpTunnelConstant.type_1 == flag) { // 发送数据
-							OutputStream o =  map.get(i);
+							OutputStream o =  map.get(i).getOutputStream();
 							o.write(buf,3 + offset, l - 3);
 							o.flush();
 						} else if (HttpTunnelConstant.type_2 == flag) { // 新建连接
 							String[] context = new String(buf, 3 + offset, l - 3).split(" ");
 							log.info("长度{} 新建连接 {}，客户端地址 {}, 端口 {}", l, i, context[0], context[1]);
-							Socket s = new Socket(context[0], Integer.valueOf(context[1]));
-							map.put(i, s.getOutputStream());
-							ThreadUtils.execute(() -> {
-								handleReceive(i, s);
-							});
+							try {
+								Socket s = new Socket(context[0], Integer.valueOf(context[1]));
+								HttpStreamModel m = new HttpStreamModel(s);
+								map.put(i, m);
+								ThreadUtils.execute(() -> {
+									handleReceive(i, m);
+								});
+							} catch (IOException e) {
+								if (map.containsKey(i))
+									map.remove(i);
+
+								log.error(e.getMessage(), e);
+								String msg = "请求被拒绝";
+								Byte[] bytes = new Byte[msg.length() + 3];
+								bytes[0] = HttpTunnelConstant.type_51;
+								bytes[1] = buf[1 + offset];
+								bytes[2] = buf[2 + offset];
+								ArrayUtils.byte2Byte(msg.getBytes(), 0, bytes, 3, msg.length());
+								msgQueue.put(bytes);
+							}
 						} else if (HttpTunnelConstant.byte_127 == flag) {
 							// 收到心跳包, 进行返回
 							Byte[] bytes = new Byte[3];
@@ -172,12 +188,12 @@ public class HttpTunnelServer {
 		/**
 		 * 接收外网返回的内容
 		 * @param i
-		 * @param socket
+		 * @param model
 		 */
-		public void handleReceive(int i, Socket socket){
+		public void handleReceive(int i, HttpStreamModel model){
 			byte h = (byte) (i >> 8);
 			byte l = (byte) (i & 0xff);
-			try(InputStream in = socket.getInputStream()) {
+			try(InputStream in = model.getInputStream()) {
 				int len;
 				byte buf[] = new byte[packageLength - 3 - lengthByte];
 				Map<Integer, OutputStream> map = new HashMap<>(32);

@@ -12,6 +12,9 @@ public class HttpTunnelConstant {
     /** client 收到新建连接请求，通知 server 新建连接 **/
     public static final byte type_2 = 2;
 
+    /** server 端发生异常 **/
+    public static final byte type_51 = 51;
+
     /** 发送心跳包 **/
     public static final byte byte_127 = 127;
 

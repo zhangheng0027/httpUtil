@@ -30,7 +30,7 @@ public class HttpTunnelClient {
     private final Socket serverSocket;
     private final ServerSocket monitorSocket;
     private static final LinkedBlockingQueue<Byte[]> msgQueue = new LinkedBlockingQueue(1024);; // 消息队列
-    private static final ConcurrentHashMap<Integer, OutputStream> map = new ConcurrentHashMap(64);
+    private static final ConcurrentHashMap<Integer, HttpStreamModel> map = new ConcurrentHashMap(64);
 
     static {
         lengthByte = MathUtils.getLengthByte(PackageLength);
@@ -139,9 +139,15 @@ public class HttpTunnelClient {
                         if (HttpTunnelConstant.type_0 == flag) {
                             if (!map.containsKey(i))
                                 continue;
-                            OutputStream o = map.get(i);
+                            OutputStream o = map.get(i).getOutputStream();
                             o.write(buf, 3 + offset, l - 3);
                             o.flush();
+                        } else if (HttpTunnelConstant.type_51 == flag) {
+                            if (!map.containsKey(i))
+                                continue;
+                            HttpStreamModel model = map.get(i);
+                            map.remove(i);
+                            model.close();
                         }
                         if (isBreak)
                             break;
@@ -165,25 +171,21 @@ public class HttpTunnelClient {
         }
     }
     static class A {
-        final private InputStream inputStream;
-        final private OutputStream outputStream;
-        final private Socket socket;
+        final private HttpStreamModel model;
         final int flag;
         final byte h;
         final byte l;
         A(Socket s) throws IOException {
             flag = globalFlag.incrementAndGet();
-            socket = s;
-            inputStream = s.getInputStream();
-            outputStream = s.getOutputStream();
-            map.put(flag, outputStream);
+            model = new HttpStreamModel(s);
+            map.put(flag, model);
             h = (byte) (flag >> 8);
             l = (byte) (flag & 0xff);
         }
 
         public void handle() throws IOException, InterruptedException {
             byte[] buff = new byte[PackageLength - 3 - lengthByte];
-            int len = inputStream.read(buff);
+            int len = model.getInputStream().read(buff);
             if (len <= 0) {
                 return;
             }
@@ -201,8 +203,8 @@ public class HttpTunnelClient {
             if (cs[0].startsWith("CONNECT")) {
                 String ack = "HTTP/1.0 200 Connection established\r\n";
                 ack = ack + "Proxy-agent: proxy\r\n\r\n";
-                outputStream.write(ack.getBytes());
-                outputStream.flush();
+                model.getOutputStream().write(ack.getBytes());
+                model.getOutputStream().flush();
             } else {
                 Byte[] bytes = new Byte[len + 3];
                 bytes[0] = HttpTunnelConstant.type_1;
@@ -211,7 +213,7 @@ public class HttpTunnelClient {
                 ArrayUtils.byte2Byte(buff, 0, bytes, 3, len);
                 msgQueue.put(bytes);
             }
-            while ((len = inputStream.read(buff, 0, buff.length)) != -1) {
+            while ((len = model.getInputStream().read(buff, 0, buff.length)) != -1) {
                 Byte[] b = new Byte[len + 3];
                 b[0] = HttpTunnelConstant.type_1;
                 b[1] = h;
@@ -223,7 +225,7 @@ public class HttpTunnelClient {
 
         public void finalize() {
             map.remove(flag);
-            HttpProxyUtil.close(inputStream, outputStream, socket);
+            HttpProxyUtil.close(model);
         }
     }
 
