@@ -29,6 +29,6 @@ public class HttpStreamModel implements java.io.Closeable {
 
 	@Override
 	public void close() throws IOException {
-		HttpProxyUtil.close(socket, outputStream, inputStream);
+		HttpProxyUtil.close(outputStream, inputStream, socket);
 	}
 }
